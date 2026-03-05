@@ -1,0 +1,83 @@
+#! /usr/bin/env bash
+# Create links for the most common spells in the current folder
+
+shopt -s extglob
+set -o pipefail   # trace error through pipes
+set -o errtrace   # trace error through time command
+#set -o xtrace     # trace commands before they are executed
+#set -o nounset    # exit if any used var was not initialized
+#set -o errexit    # exit if any statement returns an error
+set +o noclobber
+
+NOOP=${NOOP:-}
+VERBOSE=${VERBOSE:-0}
+ARGS=()
+
+function verbose()  { (( VERBOSE > 0 )) && echo -e "$@"; }
+function subtitle() { echo -e "\033[34;1m▶\033[0m \0033[1m$@\033[0m"; }
+function dry_run()  { [[ -n $NOOP ]] && echo -e " \033[0;34m(dry-run): \033[0m$@" || eval "$@" ; }
+
+# Derive the incantation folder from the path of the apparate script you ran:
+folder=${0%/*}
+
+function parse_args() { # {{{2
+  while (( $# > 0 )); do # {{{3
+    # Replace --parm=arg with --parm arg
+    [[ $1 == --*=* ]] && set -- "${1%%=*}" "${1#*=}" "${@:2}"
+    case $1 in
+      # Standard options
+      --force)
+        FORCE=1
+        ;;
+      --help|-h|-\?)
+        usage
+        exit 0
+        ;;
+      --noop|--dry_run|--dry-run)
+        NOOP=:
+        ;;
+      --quiet)
+        VERBOSE=0
+        ;;
+      -v|--verbose)
+        VERBOSE=$((VERBOSE + 1))
+        (( VERBOSE > 2 )) && set -o xtrace     # trace commands before they are executed
+        ;;
+      -y|--yes|--assumeyes|--assume_yes|--assume-yes)
+        ASSUMEYES=1
+        trace "All prompts will be answered \"yes\" automatically"
+        ;;
+      -?*|--*=) # Invalid options
+        ;;
+      --) # Force end of options
+        shift
+        break
+        ;;
+      *)  # Positional Argument
+        ARGS+=( "$1" )
+        ;;
+    esac
+    shift
+  done # 3}}}
+
+  # Set all positional arguments back in the proper order
+  eval set -- "${ARGS[@]}"
+} # 2}}}
+
+function main() { # {{{2
+  parse_args "$@"
+
+  (( VERBOSE > 0 )) && subtitle "Creating invocations for common spells stored in $folder"
+
+  for spell in status-all push-all pull-all update-code; do
+    [[ -f $folder/$spell ]] || continue
+    if [[ ! -x ./$spell ]]; then
+      verbose "  Apparating $spell..."
+      dry_run ln -s $folder/$spell ./$spell
+    fi
+  done
+} # 2}}}
+
+main "$@"
+
+# vim: syntax=bash foldmethod=marker

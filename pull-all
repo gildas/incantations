@@ -1,0 +1,57 @@
+#! /usr/bin/env bash
+
+shopt -s extglob
+set -o pipefail   # trace error through pipes
+set -o errtrace   # trace error through time command
+#set -o xtrace     # trace commands before they are executed
+#set -o nounset    # exit if any used var was not initialized
+#set -o errexit    # exit if any statement returns an error
+set +o noclobber
+
+INCANTATIONS_ROOT="$(dirname "$(readlink -f "$0")")"
+
+[[ -f .env ]] && source .env
+
+if [[ ! -d $INCANTATIONS_ROOT ]]; then
+  echo -e "\033[0;31mFatal Error: This script could not find where the spells are located, Error: 1\033[0m]" >&2
+  exit 1
+fi
+source $INCANTATIONS_ROOT/toolbox
+
+command -v git    &>/dev/null || die "You need git (please check https://git-scm.com)" -1
+
+function gpuA() { # {{{
+  local remote="$1"
+  local folder="$2"
+  local local_branches=($(git -C "$folder" for-each-ref --format='%(refname:short)' refs/heads/))
+  local remote_branches=($(git -C "$folder" branch --remotes --no-color --no-column | grep origin | grep -v HEAD))
+  local current_branch="$(git -C "$folder" branch --show-current)"
+
+  for local_branch in ${local_branches[@]}; do
+    if [[ -n $(printf "%s|" "${remote_branches[@]}" | grep "origin\/${local_branch}|")  ]]; then
+      verbose "  Pulling branch $local_branch"
+      if [[ $local_branch == $current_branch  ]]; then
+        dry_run git -C "$folder" pull
+      else
+        dry_run git -C "$folder" fetch ${remote} "${local_branch}:${local_branch}"
+      fi
+    else
+      verbose "  Not pulling local only branch $local_branch"
+    fi
+  done
+  verbose "  Pulling tags from $remote"
+  dry_run git -C "$folder" pull --tags $remote
+} # }}}
+
+function main() {
+  parse_args "" "$@"
+
+  for folder in *; do
+    if [[ -d $folder && -d $folder/.git ]]; then
+      title "Processing $folder"
+      gpuA origin "$folder"
+    fi
+  done
+}
+
+main "$@"

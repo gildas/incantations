@@ -1,0 +1,161 @@
+#! /usr/bin/env bash
+
+shopt -s extglob
+set -o pipefail   # trace error through pipes
+set -o errtrace   # trace error through time command
+#set -o xtrace     # trace commands before they are executed
+#set -o nounset    # exit if any used var was not initialized
+#set -o errexit    # exit if any statement returns an error
+set +o noclobber
+
+INCANTATIONS_ROOT="$(dirname "$(readlink -f "$0")")"
+
+[[ -f .env ]] && source .env
+
+if [[ ! -d $INCANTATIONS_ROOT ]]; then
+  echo -e "\033[0;31mFatal Error: This script could not find where the spells are located, Error: 1\033[0m]" >&2
+  exit 1
+fi
+source $INCANTATIONS_ROOT/toolbox
+
+MESSAGE=""
+DEPLOY=0
+PUSH=0
+
+function gpA() { # {{{2
+	local VERBOSE=${VERBOSE:-0}
+	local folder="."
+	while (( $# > 0 ))
+	do
+		[[ $1 == --*=* ]] && set -- "${1%%=*}" "${1#*=}" "${@:2}"
+		case $1 in
+			(-f | -C | --folder) [[ -z $2 || ${2:0:1} == '-' ]] && die "Argument for option $1 is missing"
+				folder=$2
+				shift 2
+				continue ;;
+			(--quiet) VERBOSE=0  ;;
+			(-v | --verbose) VERBOSE=$((VERBOSE + 1))
+				(( VERBOSE > 2 )) && set -o xtrace ;;
+			(-?* | --*=)  ;;
+			(--) shift
+				break ;;
+			(*) ARGS+=("$1")  ;;
+		esac
+		shift
+	done
+	local remotes=($(git -C "$folder" remote -v | grep push | cut -f1))
+	for remote in ${remotes[@]}
+	do
+		[[ $remote == upstream ]] && continue
+		(( VERBOSE )) && echo "Pushing to $remote"
+		dry_run git -C "$folder" push $remote
+		(( VERBOSE )) && echo "Pushing tags to $remote"
+		dry_run git -C "$folder" push --tags $remote
+	done
+} # 2}}}
+
+
+function usage() { # {{{2
+  cat <<EOF
+Usage: $0 [options] [files]
+  
+This script updates the code in all the repositories.
+  
+Options:
+  -m, --message message  The comment to use in the commit
+  --deploy               Deploy the code after the commit
+  --push                 Push the changes to the remote repository
+  -h, --help             Display this help and exit
+  -v, --verbose          Display verbose output
+  --dry-run,--noop       Do not execute any changing instruction
+  -q, --quiet            Display no output
+  -V, --version          Display the version and exit
+EOF
+} # 2}}}
+
+function parse_args() { # {{{2
+  while [[ $# -gt 0 ]]; do
+    [[ $1 == --*=* ]] && set -- "${1%%=*}" "${1#*=}" "${@:2}"
+    case $1 in
+      --deploy)
+        DEPLOY=1
+        ;;
+      -m|--message)
+        [[ -z $2 || ${2:0:1} == '-' ]] && die "Argument for option $1 is missing"
+        MESSAGE="$2"
+        shift
+        ;;
+      --push)
+        PUSH=1
+        ;;
+      --dry-run|--noop)
+        NOOP="echo -e ${ORANGE}  🎲🎲 Want to execute: ${OFF}"
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      -v|--verbose)
+        VERBOSE=$((VERBOSE + 1))
+        ((VERBOSE > 2 )) && set -o xtrace
+        ;;
+       -?*|--*=) # unsupported flags
+        echo "Error: Unsupported flag $1" >&2
+        ;;
+      --) # end argument parsing
+        shift
+        break
+        ;;
+      *)
+        ARGS+=( "$1" )
+        ;;
+    esac
+    shift
+  done
+
+  [[ -z $MESSAGE ]] && die "message is required."
+
+  # Set all positional arguments in their proper place
+  eval set -- "${ARGS[@]}"
+} # 2}}}
+
+function main() { # {{{
+  local status
+
+  parse_args "$@"
+
+  if [[ ${#ARGS[@]} == 0 ]]; then
+    exit 0
+  fi
+
+  for folder in * ; do
+    [[ ! -d $folder ]]            && continue
+    [[ $folder =~ .*NOT_READY$ ]] && continue
+    [[ $folder =~ .*EOL$ ]]       && continue
+    if [[ -d $folder/.git ]]; then
+      title "Processing $folder"
+      modified=()
+      for file in ${ARGS[@]} ; do
+        if [[ $(git -C $folder status --porcelain $file) ]]; then
+          verbose "  Adding $file to commit"
+          $NOOP git -C $folder add $file
+          modified+=( "$file" )
+        fi
+      done
+      if [[ -n $modified ]]; then
+        verbose "  Committing ${#modified[@]} files"
+        $NOOP git -C $folder commit --message "$MESSAGE" ${modified[@]}
+        if (( PUSH )) ; then
+          verbose "  Pushing all branches"
+          dry_run gpA -C $folder -v
+        fi
+        if (( DEPLOY )) ; then
+          verbose "  Deploying code"
+          (cd $folder ; dry_run make deploy)
+        fi
+      fi
+    fi
+  done
+}
+
+main "$@"

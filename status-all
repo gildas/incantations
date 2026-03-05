@@ -1,0 +1,39 @@
+#! /usr/bin/env bash
+
+shopt -s extglob
+set -o pipefail   # trace error through pipes
+set -o errtrace   # trace error through time command
+#set -o xtrace     # trace commands before they are executed
+#set -o nounset    # exit if any used var was not initialized
+#set -o errexit    # exit if any statement returns an error
+set +o noclobber
+
+INCANTATIONS_ROOT="$(dirname "$(readlink -f "$0")")"
+
+[[ -f .env ]] && source .env
+
+if [[ ! -d $INCANTATIONS_ROOT ]]; then
+  echo -e "\033[0;31mFatal Error: This script could not find where the spells are located, Error: 1\033[0m]" >&2
+  exit 1
+fi
+source $INCANTATIONS_ROOT/toolbox
+
+command -v git    &>/dev/null || die "You need git (please check https://git-scm.com)" -1
+
+function main() {
+  parse_args "" "$@"
+
+  for folder in * ; do
+    if [[ -d $folder && -d $folder/.git ]]; then
+      gitstatus=$(git -C $folder status | grep -v 'Your branch is up to date' | grep -v 'nothing to commit' | grep -v 'publish your local commits' | grep -v 'On branch')
+      if [[ -n $gitstatus ]]; then
+        title "Processing $folder"
+        echo $gitstatus
+        echo "Last Commit:"
+        git -C $folder show --name-only HEAD
+      fi
+    fi
+  done
+}
+
+main "$@"
