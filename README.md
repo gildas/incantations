@@ -18,7 +18,7 @@ Welcome to my personal grimoire. This repository houses the **Bash scripts** I u
 To add these charms to your local environment, clone the repository and add the directory to your `$PATH`:
 
 ```bash
-git clone [https://github.com/gildas/incantations.git](https://github.com/gildas/incantations.git)
+git clone https://github.com/gildas/incantations.git
 ./incantations/status-all -v
 ```
 
