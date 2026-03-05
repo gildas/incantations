@@ -130,29 +130,29 @@ function main() { # {{{
 
   for folder in * ; do
     [[ ! -d $folder ]]            && continue
-    [[ $folder =~ .*NOT_READY$ ]] && continue
-    [[ $folder =~ .*EOL$ ]]       && continue
-    if [[ -d $folder/.git ]]; then
-      title "Processing $folder"
-      modified=()
-      for file in ${ARGS[@]} ; do
-        if [[ $(git -C $folder status --porcelain $file) ]]; then
-          verbose "  Adding $file to commit"
-          $NOOP git -C $folder add $file
-          modified+=( "$file" )
-        fi
-      done
-      if [[ -n $modified ]]; then
-        verbose "  Committing ${#modified[@]} files"
-        $NOOP git -C $folder commit --message "$MESSAGE" ${modified[@]}
-        if (( PUSH )) ; then
-          verbose "  Pushing all branches"
-          dry_run gpA -C $folder -v
-        fi
-        if (( DEPLOY )) ; then
-          verbose "  Deploying code"
-          (cd $folder ; dry_run make deploy)
-        fi
+    [[ ! -d $folder/.git ]]       && continue
+    [[ $folder =~ .*-EOL$ ]]      && continue
+    [[ $folder =~ .*-IGNORE$ ]]   && continue
+    [[ $folder =~ .*-NOTREADY$ ]] && continue
+    title "Processing $folder"
+    modified=()
+    for file in ${ARGS[@]} ; do
+      if [[ $(git -C $folder status --porcelain $file) ]]; then
+        verbose "  Adding $file to commit"
+        $NOOP git -C $folder add $file
+        modified+=( "$file" )
+      fi
+    done
+    if [[ -n $modified ]]; then
+      verbose "  Committing ${#modified[@]} files"
+      $NOOP git -C $folder commit --message "$MESSAGE" ${modified[@]}
+      if (( PUSH )) ; then
+        verbose "  Pushing all branches"
+        dry_run gpA -C $folder -v
+      fi
+      if (( DEPLOY )) ; then
+        verbose "  Deploying code"
+        (cd $folder ; dry_run make deploy)
       fi
     fi
   done

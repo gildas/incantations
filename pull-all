@@ -47,10 +47,13 @@ function main() {
   parse_args "" "$@"
 
   for folder in *; do
-    if [[ -d $folder && -d $folder/.git ]]; then
-      title "Processing $folder"
-      gpuA origin "$folder"
-    fi
+    [[ ! -d $folder ]]            && continue
+    [[ ! -d $folder/.git ]]       && continue
+    [[ $folder =~ .*-EOL$ ]]      && continue
+    [[ $folder =~ .*-IGNORE$ ]]   && continue
+    [[ $folder =~ .*-NOTREADY$ ]] && continue
+    title "Processing $folder"
+    gpuA origin "$folder"
   done
 }
 

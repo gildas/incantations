@@ -24,14 +24,17 @@ function main() {
   parse_args "" "$@"
 
   for folder in * ; do
-    if [[ -d $folder && -d $folder/.git ]]; then
-      gitstatus=$(git -C $folder status | grep -v 'Your branch is up to date' | grep -v 'nothing to commit' | grep -v 'publish your local commits' | grep -v 'On branch')
-      if [[ -n $gitstatus ]]; then
-        title "Processing $folder"
-        echo $gitstatus
-        echo "Last Commit:"
-        git -C $folder show --name-only HEAD
-      fi
+    [[ ! -d $folder ]]            && continue
+    [[ ! -d $folder/.git ]]       && continue
+    [[ $folder =~ .*-EOL$ ]]      && continue
+    [[ $folder =~ .*-IGNORE$ ]]   && continue
+    [[ $folder =~ .*-NOTREADY$ ]] && continue
+    gitstatus=$(git -C $folder status | grep -v 'Your branch is up to date' | grep -v 'nothing to commit' | grep -v 'publish your local commits' | grep -v 'On branch')
+    if [[ -n $gitstatus ]]; then
+      title "Processing $folder"
+      echo $gitstatus
+      echo "Last Commit:"
+      git -C $folder show --name-only HEAD
     fi
   done
 }
